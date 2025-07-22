@@ -93,6 +93,29 @@ func GarbageCollect(n *core.IpfsNode, ctx context.Context) error {
 	return CollectResult(ctx, rmed, nil)
 }
 
+func GarbageCollectBloom(
+	n *core.IpfsNode,
+	ctx context.Context,
+	bloomFilterSize int64,
+	bloomFilterHashes int,
+) error {
+	roots, err := BestEffortRoots(n.FilesRoot)
+	if err != nil {
+		return err
+	}
+	rmed := gc.GCBloom(
+		ctx,
+		n.Blockstore,
+		n.Repo.Datastore(),
+		n.Pinning,
+		roots,
+		bloomFilterSize,
+		bloomFilterHashes,
+	)
+
+	return CollectResult(ctx, rmed, nil)
+}
+
 // CollectResult collects the output of a garbage collection run and calls the
 // given callback for each object removed.  It also collects all errors into a
 // MultiError which is returned after the gc is completed.
@@ -157,6 +180,31 @@ func GarbageCollectAsync(n *core.IpfsNode, ctx context.Context) <-chan gc.Result
 	}
 
 	return gc.GC(ctx, n.Blockstore, n.Repo.Datastore(), n.Pinning, roots)
+}
+
+func GarbageCollectBloomAsync(
+	n *core.IpfsNode,
+	ctx context.Context,
+	bloomFilterSize int64,
+	bloomFilterHashes int,
+) <-chan gc.Result {
+	roots, err := BestEffortRoots(n.FilesRoot)
+	if err != nil {
+		out := make(chan gc.Result)
+		out <- gc.Result{Error: err}
+		close(out)
+		return out
+	}
+
+	return gc.GCBloom(
+		ctx,
+		n.Blockstore,
+		n.Repo.Datastore(),
+		n.Pinning,
+		roots,
+		bloomFilterSize,
+		bloomFilterHashes,
+	)
 }
 
 func PeriodicGC(ctx context.Context, node *core.IpfsNode) error {

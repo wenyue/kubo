@@ -83,6 +83,7 @@ type Adder struct {
 	MaxHAMTFanout     int
 	Silent            bool
 	NoCopy            bool
+	SmallFileSize     int64
 	Chunker           string
 	mroot             *mfs.Root
 	unlocker          bstore.Unlocker
@@ -132,13 +133,14 @@ func (adder *Adder) add(reader io.Reader) (ipld.Node, error) {
 	}
 
 	params := ihelper.DagBuilderParams{
-		Dagserv:     adder.bufferedDS,
-		RawLeaves:   adder.RawLeaves,
-		Maxlinks:    maxLinks,
-		NoCopy:      adder.NoCopy,
-		CidBuilder:  adder.CidBuilder,
-		FileMode:    adder.FileMode,
-		FileModTime: adder.FileMtime,
+		Dagserv:       adder.bufferedDS,
+		RawLeaves:     adder.RawLeaves,
+		Maxlinks:      maxLinks,
+		NoCopy:        adder.NoCopy,
+		SmallFileSize: adder.SmallFileSize,
+		CidBuilder:    adder.CidBuilder,
+		FileMode:      adder.FileMode,
+		FileModTime:   adder.FileMtime,
 	}
 
 	db, err := params.New(chnk)

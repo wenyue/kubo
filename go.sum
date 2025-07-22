@@ -894,6 +894,10 @@ github.com/warpfork/go-testmark v0.12.1/go.mod h1:kHwy7wfvGSPh1rQJYKayD4AbtNaeyZ
 github.com/warpfork/go-wish v0.0.0-20200122115046-b9ea61034e4a/go.mod h1:x6AKhvSSexNrVSrViXSHUEbICjmGXhtgABaHIySUSGw=
 github.com/warpfork/go-wish v0.0.0-20220906213052-39a1cc7a02d0 h1:GDDkbFiaK8jsSDJfjId/PEGEShv6ugrt4kYsC5UIDaQ=
 github.com/warpfork/go-wish v0.0.0-20220906213052-39a1cc7a02d0/go.mod h1:x6AKhvSSexNrVSrViXSHUEbICjmGXhtgABaHIySUSGw=
+github.com/wenyue/boxo v0.0.0-20250722104435-0f747c9bb413 h1:8vxEGtQWJG4rxZPnhlcjCutZhc4Fz8sitobRf3wf5GQ=
+github.com/wenyue/boxo v0.0.0-20250722104435-0f747c9bb413/go.mod h1:3IPh7YFcCIcKp6o02mCHovrPntoT5Pctj/7j4syh/RM=
+github.com/wenyue/boxo v0.33.0 h1:TaRu3JydshOhxxyQ4lusuQuDfJ+CFgLz/CMQP4Bm71o=
+github.com/wenyue/boxo v0.33.0/go.mod h1:+Q3VR9eJsbggxNJQHuduQNh5SAqfmq7Gtm0ptdcoSE0=
 github.com/whyrusleeping/base32 v0.0.0-20170828182744-c30ac30633cc h1:BCPnHtcboadS0DvysUuJXZ4lWVv5Bh5i7+tbIyi+ck4=
 github.com/whyrusleeping/base32 v0.0.0-20170828182744-c30ac30633cc/go.mod h1:r45hJU7yEoA81k6MWNhpMj/kms0n14dkzkxYHoB96UM=
 github.com/whyrusleeping/cbor v0.0.0-20171005072247-63513f603b11 h1:5HZfQkwe0mIfyDmc1Em5GqlNRzcdtlv4HTNmdpt7XH0=

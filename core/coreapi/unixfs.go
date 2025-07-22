@@ -61,6 +61,7 @@ func (api *UnixfsAPI) Add(ctx context.Context, files files.Node, opts ...options
 		attribute.Bool("onlyhash", settings.OnlyHash),
 		attribute.Bool("fscache", settings.FsCache),
 		attribute.Bool("nocopy", settings.NoCopy),
+		attribute.Int64("smallfilesize", settings.SmallFileSize),
 		attribute.Bool("silent", settings.Silent),
 		attribute.Bool("progress", settings.Progress),
 	)
@@ -149,6 +150,7 @@ func (api *UnixfsAPI) Add(ctx context.Context, files files.Node, opts ...options
 		fileAdder.MaxHAMTFanout = settings.MaxHAMTFanout
 	}
 	fileAdder.NoCopy = settings.NoCopy
+	fileAdder.SmallFileSize = settings.SmallFileSize
 	fileAdder.CidBuilder = prefix
 	fileAdder.PreserveMode = settings.PreserveMode
 	fileAdder.PreserveMtime = settings.PreserveMtime
