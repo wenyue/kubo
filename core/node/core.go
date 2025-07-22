@@ -200,11 +200,12 @@ func Files(strategy string) func(mctx helpers.MetricsCtx, lc fx.Lifecycle, repo 
 		var nd *merkledag.ProtoNode
 		ctx := helpers.LifecycleCtx(mctx, lc)
 		val, err := repo.Datastore().Get(ctx, dsk)
+		offlineDag := merkledag.NewDAGService(blockservice.New(bs, offline.Exchange(bs)))
 
 		switch {
 		case errors.Is(err, datastore.ErrNotFound):
 			nd = unixfs.EmptyDirNode()
-			err := dag.Add(ctx, nd)
+			err := offlineDag.Add(ctx, nd)
 			if err != nil {
 				return nil, fmt.Errorf("failure writing filesroot to dagstore: %s", err)
 			}
@@ -214,7 +215,6 @@ func Files(strategy string) func(mctx helpers.MetricsCtx, lc fx.Lifecycle, repo 
 				return nil, err
 			}
 
-			offlineDag := merkledag.NewDAGService(blockservice.New(bs, offline.Exchange(bs)))
 			rnd, err := offlineDag.Get(ctx, c)
 			if err != nil {
 				return nil, fmt.Errorf("error loading filesroot from dagservice: %s", err)
@@ -241,7 +241,7 @@ func Files(strategy string) func(mctx helpers.MetricsCtx, lc fx.Lifecycle, repo 
 			prov = nil
 		}
 
-		root, err := mfs.NewRoot(ctx, dag, nd, pf, prov)
+		root, err := mfs.NewRoot(ctx, offlineDag, nd, pf, prov)
 		if err != nil {
 			return nil, err
 		}
