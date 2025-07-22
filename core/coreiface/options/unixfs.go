@@ -30,10 +30,11 @@ type UnixfsAddSettings struct {
 	Chunker string
 	Layout  Layout
 
-	Pin      bool
-	OnlyHash bool
-	FsCache  bool
-	NoCopy   bool
+	Pin           bool
+	OnlyHash      bool
+	FsCache       bool
+	NoCopy        bool
+	SmallFileSize int64
 
 	Events   chan<- interface{}
 	Silent   bool
@@ -68,10 +69,11 @@ func UnixfsAddOptions(opts ...UnixfsAddOption) (*UnixfsAddSettings, cid.Prefix, 
 		Chunker: "size-262144",
 		Layout:  BalancedLayout,
 
-		Pin:      false,
-		OnlyHash: false,
-		FsCache:  false,
-		NoCopy:   false,
+		Pin:           false,
+		OnlyHash:      false,
+		FsCache:       false,
+		NoCopy:        false,
+		SmallFileSize: 0,
 
 		Events:   nil,
 		Silent:   false,
@@ -296,6 +298,17 @@ func (unixfsOpts) FsCache(enable bool) UnixfsAddOption {
 func (unixfsOpts) Nocopy(enable bool) UnixfsAddOption {
 	return func(settings *UnixfsAddSettings) error {
 		settings.NoCopy = enable
+		return nil
+	}
+}
+
+// SmallFileSize tells the adder the threshold for small files. Only the files larger than
+// this size will be added to the filestore.
+//
+// Experimental
+func (unixfsOpts) SmallFileSize(size int64) UnixfsAddOption {
+	return func(settings *UnixfsAddSettings) error {
+		settings.SmallFileSize = size
 		return nil
 	}
 }

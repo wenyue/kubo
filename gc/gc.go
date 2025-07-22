@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	bloom "github.com/ipfs/bbloom"
 	bserv "github.com/ipfs/boxo/blockservice"
 	bstore "github.com/ipfs/boxo/blockstore"
 	offline "github.com/ipfs/boxo/exchange/offline"
@@ -28,17 +29,7 @@ type Result struct {
 	Error      error
 }
 
-// converts a set of CIDs with different codecs to a set of CIDs with the raw codec.
-func toRawCids(set *cid.Set) (*cid.Set, error) {
-	newSet := cid.NewSet()
-	err := set.ForEach(func(c cid.Cid) error {
-		newSet.Add(cid.NewCidV1(cid.Raw, c.Hash()))
-		return nil
-	})
-	return newSet, err
-}
-
-// GC performs a mark and sweep garbage collection of the blocks in the blockstore
+// gc performs a mark and sweep garbage collection of the blocks in the blockstore
 // first, it creates a 'marked' set and adds to it the following:
 // - all recursively pinned blocks, plus all of their descendants (recursively)
 // - bestEffortRoots, plus all of its descendants (recursively)
@@ -47,13 +38,18 @@ func toRawCids(set *cid.Set) (*cid.Set, error) {
 //
 // The routine then iterates over every block in the blockstore and
 // deletes any block that is not found in the marked set.
-func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn pin.Pinner, bestEffortRoots []cid.Cid) <-chan Result {
+func gc(
+	ctx context.Context,
+	bs bstore.GCBlockstore,
+	dstor dstore.Datastore,
+	pn pin.Pinner,
+	bestEffortRoots []cid.Cid,
+	init func(output chan<- Result) error,
+	has func(cid.Cid) bool,
+) <-chan Result {
 	ctx, cancel := context.WithCancel(ctx)
 
 	unlocker := bs.GCLock(ctx)
-
-	bsrv := bserv.New(bs, offline.Exchange(bs))
-	ds := dag.NewDAGService(bsrv)
 
 	output := make(chan Result, 128)
 
@@ -62,18 +58,7 @@ func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn 
 		defer close(output)
 		defer unlocker.Unlock(ctx)
 
-		gcs, err := ColoredSet(ctx, pn, ds, bestEffortRoots, output)
-		if err != nil {
-			select {
-			case output <- Result{Error: err}:
-			case <-ctx.Done():
-			}
-			return
-		}
-
-		// The blockstore reports raw blocks. We need to remove the codecs from the CIDs.
-		gcs, err = toRawCids(gcs)
-		if err != nil {
+		if err := init(output); err != nil {
 			select {
 			case output <- Result{Error: err}:
 			case <-ctx.Done():
@@ -102,7 +87,7 @@ func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn 
 				}
 				// NOTE: assumes that all CIDs returned by the keychan are _raw_ CIDv1 CIDs.
 				// This means we keep the block as long as we want it somewhere (CIDv1, CIDv0, Raw, other...).
-				if !gcs.Has(k) {
+				if !has(k) {
 					err := bs.DeleteBlock(ctx, k)
 					removed++
 					if err != nil {
@@ -151,10 +136,78 @@ func GC(ctx context.Context, bs bstore.GCBlockstore, dstor dstore.Datastore, pn 
 	return output
 }
 
+func GC(
+	ctx context.Context,
+	bs bstore.GCBlockstore,
+	dstor dstore.Datastore,
+	pn pin.Pinner,
+	bestEffortRoots []cid.Cid,
+) <-chan Result {
+	var gcs *cid.Set
+
+	init := func(output chan<- Result) error {
+		bsrv := bserv.New(bs, offline.Exchange(bs))
+		ds := dag.NewDAGService(bsrv)
+
+		var err error
+		gcs, err = ColoredSet(ctx, pn, ds, bestEffortRoots, output)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	has := func(c cid.Cid) bool {
+		return gcs.Has(c)
+	}
+
+	return gc(ctx, bs, dstor, pn, bestEffortRoots, init, has)
+}
+
+func GCBloom(
+	ctx context.Context,
+	bs bstore.GCBlockstore,
+	dstor dstore.Datastore,
+	pn pin.Pinner,
+	bestEffortRoots []cid.Cid,
+	bloomFilterSize int64,
+	bloomFilterHashes int,
+) <-chan Result {
+	var gcs *bloom.Bloom
+
+	init := func(output chan<- Result) error {
+		bsrv := bserv.New(bs, offline.Exchange(bs))
+		ds := dag.NewDAGService(bsrv)
+
+		var err error
+		gcs, err = ColoredSetBloom(
+			ctx,
+			pn,
+			ds,
+			bestEffortRoots,
+			bloomFilterSize,
+			bloomFilterHashes,
+			output,
+		)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	has := func(c cid.Cid) bool {
+		return gcs.Has(c.Bytes())
+	}
+
+	return gc(ctx, bs, dstor, pn, bestEffortRoots, init, has)
+}
+
 // Descendants recursively finds all the descendants of the given roots and
-// adds them to the given cid.Set, using the provided dag.GetLinks function
+// call the visit function, using the provided dag.GetLinks function
 // to walk the tree.
-func Descendants(ctx context.Context, getLinks dag.GetLinks, set *cid.Set, roots <-chan pin.StreamedPin) error {
+func Descendants(ctx context.Context, getLinks dag.GetLinks, roots <-chan pin.StreamedPin, visit func(cid.Cid) bool) error {
 	verifyGetLinks := func(ctx context.Context, c cid.Cid) ([]*ipld.Link, error) {
 		err := verifcid.ValidateCid(verifcid.DefaultAllowlist, c)
 		if err != nil {
@@ -188,9 +241,7 @@ func Descendants(ctx context.Context, getLinks dag.GetLinks, set *cid.Set, roots
 			}
 
 			// Walk recursively walks the dag and adds the keys to the given set
-			err := dag.Walk(ctx, verifyGetLinks, wrapper.Pin.Key, func(k cid.Cid) bool {
-				return set.Visit(toCidV1(k))
-			}, dag.Concurrent())
+			err := dag.Walk(ctx, verifyGetLinks, wrapper.Pin.Key, visit, dag.Concurrent())
 			if err != nil {
 				err = verboseCidError(err)
 				return err
@@ -207,13 +258,22 @@ func toCidV1(c cid.Cid) cid.Cid {
 	return c
 }
 
+// toRawCid converts any CID to a CID with the raw codec.
+func toRawCid(c cid.Cid) cid.Cid {
+	return cid.NewCidV1(cid.Raw, c.Hash())
+}
+
 // ColoredSet computes the set of nodes in the graph that are pinned by the
 // pins in the given pinner.
-func ColoredSet(ctx context.Context, pn pin.Pinner, ng ipld.NodeGetter, bestEffortRoots []cid.Cid, output chan<- Result) (*cid.Set, error) {
-	// KeySet currently implemented in memory, in the future, may be bloom filter or
-	// disk backed to conserve memory.
+func coloredSet(
+	ctx context.Context,
+	pn pin.Pinner,
+	ng ipld.NodeGetter,
+	bestEffortRoots []cid.Cid,
+	visit func(cid.Cid) bool,
+	output chan<- Result,
+) error {
 	errors := false
-	gcs := cid.NewSet()
 	getLinks := func(ctx context.Context, cid cid.Cid) ([]*ipld.Link, error) {
 		links, err := ipld.GetLinks(ctx, ng, cid)
 		if err != nil {
@@ -227,13 +287,13 @@ func ColoredSet(ctx context.Context, pn pin.Pinner, ng ipld.NodeGetter, bestEffo
 		return links, nil
 	}
 	rkeys := pn.RecursiveKeys(ctx, false)
-	err := Descendants(ctx, getLinks, gcs, rkeys)
+	err := Descendants(ctx, getLinks, rkeys, visit)
 	if err != nil {
 		errors = true
 		select {
 		case output <- Result{Error: err}:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return ctx.Err()
 		}
 	}
 
@@ -260,39 +320,79 @@ func ColoredSet(ctx context.Context, pn pin.Pinner, ng ipld.NodeGetter, bestEffo
 			}
 		}
 	}()
-	err = Descendants(ctx, bestEffortGetLinks, gcs, bestEffortRootsChan)
+	err = Descendants(ctx, bestEffortGetLinks, bestEffortRootsChan, visit)
 	if err != nil {
 		errors = true
 		select {
 		case output <- Result{Error: err}:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return ctx.Err()
 		}
 	}
 
 	dkeys := pn.DirectKeys(ctx, false)
 	for k := range dkeys {
 		if k.Err != nil {
-			return nil, k.Err
+			return k.Err
 		}
-		gcs.Add(toCidV1(k.Pin.Key))
+		visit(toCidV1(k.Pin.Key))
 	}
 
 	ikeys := pn.InternalPins(ctx, false)
-	err = Descendants(ctx, getLinks, gcs, ikeys)
+	err = Descendants(ctx, getLinks, ikeys, visit)
 	if err != nil {
 		errors = true
 		select {
 		case output <- Result{Error: err}:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return ctx.Err()
 		}
 	}
 
 	if errors {
-		return nil, ErrCannotFetchAllLinks
+		return ErrCannotFetchAllLinks
 	}
 
+	return nil
+}
+
+func ColoredSet(
+	ctx context.Context,
+	pn pin.Pinner,
+	ng ipld.NodeGetter,
+	bestEffortRoots []cid.Cid,
+	output chan<- Result,
+) (*cid.Set, error) {
+	gcs := cid.NewSet()
+	visit := func(c cid.Cid) bool {
+		return gcs.Visit(toRawCid(c))
+	}
+	if err := coloredSet(ctx, pn, ng, bestEffortRoots, visit, output); err != nil {
+		return nil, err
+	}
+	return gcs, nil
+}
+
+func ColoredSetBloom(
+	ctx context.Context,
+	pn pin.Pinner,
+	ng ipld.NodeGetter,
+	bestEffortRoots []cid.Cid,
+	bloomFilterSize int64,
+	bloomFilterHashes int,
+	output chan<- Result,
+) (*bloom.Bloom, error) {
+	gcs, err := bloom.New(float64(bloomFilterSize), float64(bloomFilterHashes))
+	if err != nil {
+		return nil, err
+	}
+	visit := func(c cid.Cid) bool {
+		gcs.Add(toRawCid(c).Bytes())
+		return true
+	}
+	if err := coloredSet(ctx, pn, ng, bestEffortRoots, visit, output); err != nil {
+		return nil, err
+	}
 	return gcs, nil
 }
 

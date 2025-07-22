@@ -65,24 +65,25 @@ func NewAdder(ctx context.Context, p pin.Pinner, bs bstore.GCLocker, ds ipld.DAG
 
 // Adder holds the switches passed to the `add` command.
 type Adder struct {
-	ctx        context.Context
-	pinning    pin.Pinner
-	gcLocker   bstore.GCLocker
-	dagService ipld.DAGService
-	bufferedDS *ipld.BufferedDAG
-	Out        chan<- interface{}
-	Progress   bool
-	Pin        bool
-	Trickle    bool
-	RawLeaves  bool
-	Silent     bool
-	NoCopy     bool
-	Chunker    string
-	mroot      *mfs.Root
-	unlocker   bstore.Unlocker
-	tempRoot   cid.Cid
-	CidBuilder cid.Builder
-	liveNodes  uint64
+	ctx           context.Context
+	pinning       pin.Pinner
+	gcLocker      bstore.GCLocker
+	dagService    ipld.DAGService
+	bufferedDS    *ipld.BufferedDAG
+	Out           chan<- interface{}
+	Progress      bool
+	Pin           bool
+	Trickle       bool
+	RawLeaves     bool
+	Silent        bool
+	NoCopy        bool
+	SmallFileSize int64
+	Chunker       string
+	mroot         *mfs.Root
+	unlocker      bstore.Unlocker
+	tempRoot      cid.Cid
+	CidBuilder    cid.Builder
+	liveNodes     uint64
 
 	PreserveMode  bool
 	PreserveMtime bool
@@ -120,13 +121,14 @@ func (adder *Adder) add(reader io.Reader) (ipld.Node, error) {
 	}
 
 	params := ihelper.DagBuilderParams{
-		Dagserv:     adder.bufferedDS,
-		RawLeaves:   adder.RawLeaves,
-		Maxlinks:    ihelper.DefaultLinksPerBlock,
-		NoCopy:      adder.NoCopy,
-		CidBuilder:  adder.CidBuilder,
-		FileMode:    adder.FileMode,
-		FileModTime: adder.FileMtime,
+		Dagserv:       adder.bufferedDS,
+		RawLeaves:     adder.RawLeaves,
+		Maxlinks:      ihelper.DefaultLinksPerBlock,
+		NoCopy:        adder.NoCopy,
+		SmallFileSize: adder.SmallFileSize,
+		CidBuilder:    adder.CidBuilder,
+		FileMode:      adder.FileMode,
+		FileModTime:   adder.FileMtime,
 	}
 
 	db, err := params.New(chnk)

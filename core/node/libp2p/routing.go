@@ -27,6 +27,9 @@ import (
 	"github.com/ipfs/kubo/repo"
 	irouting "github.com/ipfs/kubo/routing"
 )
+var (
+	IpnsPubSubTopic = "ipns"
+)
 
 type Router struct {
 	routing.Routing
@@ -241,7 +244,7 @@ func PubsubRouter(mctx helpers.MetricsCtx, lc fx.Lifecycle, in p2pPSRoutingIn) (
 			Routing: &routinghelpers.Compose{
 				ValueStore: &routinghelpers.LimitedValueStore{
 					ValueStore: psRouter,
-					Namespaces: []string{"ipns"},
+					Namespaces: []string{IpnsPubSubTopic},
 				},
 			},
 			Priority: 100,
