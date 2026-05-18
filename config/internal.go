@@ -29,6 +29,8 @@ type InternalBitswap struct {
 	ProviderSearchMaxResults    OptionalInteger
 	WantHaveReplaceSize         OptionalInteger
 	BroadcastControl            *BitswapBroadcastControl
+	MaxUploadBytesPerSec        *OptionalInteger
+	MaxDownloadBytesPerSec      *OptionalInteger
 }
 
 type BitswapBroadcastControl struct {

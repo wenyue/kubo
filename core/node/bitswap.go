@@ -67,6 +67,13 @@ func BitswapOptions(cfg *config.Config) interface{} {
 	}
 }
 
+func bitswapRateLimitValues(cfg *config.Config) (upload int64, download int64) {
+	if cfg.Internal.Bitswap == nil {
+		return 0, 0
+	}
+	return cfg.Internal.Bitswap.MaxUploadBytesPerSec.WithDefault(0), cfg.Internal.Bitswap.MaxDownloadBytesPerSec.WithDefault(0)
+}
+
 type bitswapIn struct {
 	fx.In
 
@@ -90,9 +97,21 @@ func Bitswap(serverEnabled, libp2pEnabled, httpEnabled bool) interface{} {
 
 		libp2pEnabled := in.Cfg.Bitswap.Libp2pEnabled.WithDefault(config.DefaultBitswapLibp2pEnabled)
 		if libp2pEnabled {
+			netOpts := []bsnet.NetOpt{
+				bsnet.WithConnectEventManager(connEvtMgr),
+			}
+			uploadLimit, downloadLimit := bitswapRateLimitValues(in.Cfg)
+			if uploadLimit > 0 {
+				netOpts = append(netOpts, bsnet.WithUploadRateLimit(uploadLimit))
+				logger.Infof("Bitswap upload rate limit: %d bytes/sec", uploadLimit)
+			}
+			if downloadLimit > 0 {
+				netOpts = append(netOpts, bsnet.WithDownloadRateLimit(downloadLimit))
+				logger.Infof("Bitswap download rate limit: %d bytes/sec", downloadLimit)
+			}
 			bitswapLibp2p = bsnet.NewFromIpfsHost(
 				in.Host,
-				bsnet.WithConnectEventManager(connEvtMgr),
+				netOpts...,
 			)
 		}
 

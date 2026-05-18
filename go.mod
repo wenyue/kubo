@@ -1,8 +1,8 @@
 module github.com/ipfs/kubo
 
-go 1.25
+go 1.24.6
 
-replace github.com/ipfs/boxo => github.com/wenyue/boxo v0.0.0-20251113142137-b36e7467cf82
+replace github.com/ipfs/boxo => github.com/wenyue/boxo v0.0.0-20260518094132-bec771e84ae4
 
 require (
 	bazil.org/fuse v0.0.0-20200117225306-7b5117fecadc
