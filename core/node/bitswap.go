@@ -37,6 +37,7 @@ const (
 	DefaultProviderSearchDelay         = 1000 * time.Millisecond
 	DefaultMaxProviders                = 10 // matching BitswapClientDefaultMaxProviders from https://github.com/ipfs/boxo/blob/v0.29.1/bitswap/internal/defaults/defaults.go#L15
 	DefaultWantHaveReplaceSize         = 1024
+	DefaultRebroadcastDelay            = time.Minute
 )
 
 type bitswapOptionsOut struct {
@@ -60,11 +61,38 @@ func BitswapOptions(cfg *config.Config) interface{} {
 			bitswap.TaskWorkerCount(int(internalBsCfg.TaskWorkerCount.WithDefault(DefaultTaskWorkerCount))),
 			bitswap.EngineTaskWorkerCount(int(internalBsCfg.EngineTaskWorkerCount.WithDefault(DefaultEngineTaskWorkerCount))),
 			bitswap.MaxOutstandingBytesPerPeer(int(internalBsCfg.MaxOutstandingBytesPerPeer.WithDefault(DefaultMaxOutstandingBytesPerPeer))),
+			bitswap.RebroadcastDelay(internalBsCfg.RebroadcastDelay.WithDefault(DefaultRebroadcastDelay)),
+			bitswap.SetSimulateDontHavesOnTimeout(internalBsCfg.SimulateDontHavesOnTimeout.WithDefault(true)),
 			bitswap.WithWantHaveReplaceSize(int(internalBsCfg.WantHaveReplaceSize.WithDefault(DefaultWantHaveReplaceSize))),
+		}
+
+		if dontHaveTimeoutCfg := bitswapDontHaveTimeoutConfig(internalBsCfg); dontHaveTimeoutCfg != nil {
+			opts = append(opts, bitswap.WithClientOption(client.WithDontHaveTimeoutConfig(dontHaveTimeoutCfg)))
 		}
 
 		return bitswapOptionsOut{BitswapOpts: opts}
 	}
+}
+
+func bitswapDontHaveTimeoutConfig(cfg config.InternalBitswap) *client.DontHaveTimeoutConfig {
+	if cfg.DontHaveTimeout == nil {
+		return nil
+	}
+
+	timeoutCfg := client.DefaultDontHaveTimeoutConfig()
+	dontHaveCfg := cfg.DontHaveTimeout
+	timeoutCfg.DontHaveTimeout = dontHaveCfg.DontHaveTimeout.WithDefault(timeoutCfg.DontHaveTimeout)
+	timeoutCfg.MaxExpectedWantProcessTime = dontHaveCfg.MaxExpectedWantProcessTime.WithDefault(timeoutCfg.MaxExpectedWantProcessTime)
+	timeoutCfg.MaxTimeout = dontHaveCfg.MaxTimeout.WithDefault(timeoutCfg.MaxTimeout)
+	timeoutCfg.MinTimeout = dontHaveCfg.MinTimeout.WithDefault(timeoutCfg.MinTimeout)
+	return timeoutCfg
+}
+
+func bitswapRateLimitValues(cfg *config.Config) (upload int64, download int64) {
+	if cfg.Internal.Bitswap == nil {
+		return 0, 0
+	}
+	return cfg.Internal.Bitswap.MaxUploadBytesPerSec.WithDefault(0), cfg.Internal.Bitswap.MaxDownloadBytesPerSec.WithDefault(0)
 }
 
 type bitswapIn struct {
@@ -90,9 +118,21 @@ func Bitswap(serverEnabled, libp2pEnabled, httpEnabled bool) interface{} {
 
 		libp2pEnabled := in.Cfg.Bitswap.Libp2pEnabled.WithDefault(config.DefaultBitswapLibp2pEnabled)
 		if libp2pEnabled {
+			netOpts := []bsnet.NetOpt{
+				bsnet.WithConnectEventManager(connEvtMgr),
+			}
+			uploadLimit, downloadLimit := bitswapRateLimitValues(in.Cfg)
+			if uploadLimit > 0 {
+				netOpts = append(netOpts, bsnet.WithUploadRateLimit(uploadLimit))
+				logger.Infof("Bitswap upload rate limit: %d bytes/sec", uploadLimit)
+			}
+			if downloadLimit > 0 {
+				netOpts = append(netOpts, bsnet.WithDownloadRateLimit(downloadLimit))
+				logger.Infof("Bitswap download rate limit: %d bytes/sec", downloadLimit)
+			}
 			bitswapLibp2p = bsnet.NewFromIpfsHost(
 				in.Host,
-				bsnet.WithConnectEventManager(connEvtMgr),
+				netOpts...,
 			)
 		}
 

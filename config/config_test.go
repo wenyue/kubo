@@ -1,7 +1,9 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestClone(t *testing.T) {
@@ -25,6 +27,53 @@ func TestClone(t *testing.T) {
 	delete(c.API.HTTPHeaders, "foo")
 	if newCfg.API.HTTPHeaders["foo"][0] != "bar" {
 		t.Fatal("HTTP headers not preserved")
+	}
+}
+
+func TestInternalBitswapTrafficTuningFieldsUnmarshal(t *testing.T) {
+	var cfg Config
+	err := json.Unmarshal([]byte(`{
+        "Internal": {
+            "Bitswap": {
+				"RebroadcastDelay": "876000h",
+                "SimulateDontHavesOnTimeout": true,
+                "DontHaveTimeout": {
+                    "DontHaveTimeout": "20s",
+                    "MaxExpectedWantProcessTime": "5s",
+                    "MaxTimeout": "30s",
+                    "MinTimeout": "1s"
+                }
+            }
+        }
+    }`), &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bitswap := cfg.Internal.Bitswap
+	if bitswap == nil {
+		t.Fatal("Internal.Bitswap is nil")
+	}
+	if got := bitswap.RebroadcastDelay.WithDefault(time.Minute); got != 876000*time.Hour {
+		t.Fatalf("RebroadcastDelay = %s, want 876000h", got)
+	}
+	if got := bitswap.SimulateDontHavesOnTimeout.WithDefault(false); !got {
+		t.Fatal("SimulateDontHavesOnTimeout = false, want true")
+	}
+	if bitswap.DontHaveTimeout == nil {
+		t.Fatal("DontHaveTimeout is nil")
+	}
+	if got := bitswap.DontHaveTimeout.DontHaveTimeout.WithDefault(0); got != 20*time.Second {
+		t.Fatalf("DontHaveTimeout = %s, want 20s", got)
+	}
+	if got := bitswap.DontHaveTimeout.MaxExpectedWantProcessTime.WithDefault(0); got != 5*time.Second {
+		t.Fatalf("MaxExpectedWantProcessTime = %s, want 5s", got)
+	}
+	if got := bitswap.DontHaveTimeout.MaxTimeout.WithDefault(0); got != 30*time.Second {
+		t.Fatalf("MaxTimeout = %s, want 30s", got)
+	}
+	if got := bitswap.DontHaveTimeout.MinTimeout.WithDefault(0); got != time.Second {
+		t.Fatalf("MinTimeout = %s, want 1s", got)
 	}
 }
 

@@ -27,8 +27,20 @@ type InternalBitswap struct {
 	MaxOutstandingBytesPerPeer  OptionalInteger
 	ProviderSearchDelay         OptionalDuration
 	ProviderSearchMaxResults    OptionalInteger
+	RebroadcastDelay            OptionalDuration
 	WantHaveReplaceSize         OptionalInteger
 	BroadcastControl            *BitswapBroadcastControl
+	SimulateDontHavesOnTimeout  Flag
+	DontHaveTimeout             *BitswapDontHaveTimeout
+	MaxUploadBytesPerSec        *OptionalInteger
+	MaxDownloadBytesPerSec      *OptionalInteger
+}
+
+type BitswapDontHaveTimeout struct {
+	DontHaveTimeout            OptionalDuration
+	MaxExpectedWantProcessTime OptionalDuration
+	MaxTimeout                 OptionalDuration
+	MinTimeout                 OptionalDuration
 }
 
 type BitswapBroadcastControl struct {
