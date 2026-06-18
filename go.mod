@@ -2,7 +2,10 @@ module github.com/ipfs/kubo
 
 go 1.24.6
 
-replace github.com/ipfs/boxo => github.com/wenyue/boxo v0.0.0-20260518094132-bec771e84ae4
+replace (
+	github.com/ipfs/boxo => github.com/wenyue/boxo v0.0.0-20260518094132-bec771e84ae4
+	github.com/libp2p/go-libp2p => github.com/wenyue/go-libp2p v0.0.0-20260618063000-38652e24e590
+)
 
 require (
 	bazil.org/fuse v0.0.0-20200117225306-7b5117fecadc
